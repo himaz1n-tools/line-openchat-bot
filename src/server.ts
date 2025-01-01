@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/x/oak/mod.ts";
+import { Application, Context } from "https://deno.land/x/oak/mod.ts";
 import { config } from "./config.ts";
 import { handleAdminCommands } from "./handlers/adminHandler.ts";
 import { handleJoinEvent } from "./handlers/joinHandler.ts";
@@ -9,8 +9,7 @@ const port = 8080;
 
 const app = new Application();
 
-// リクエストがLINEのWebhookから来た場合
-app.use(async (context, next) => {
+app.use(async (context: Context, next: Function) => {
   if (context.request.method === "POST" && context.request.headers.get("x-line-signature")) {
     const body = await context.request.body().value;
     const signature = context.request.headers.get("x-line-signature")!;
@@ -25,25 +24,17 @@ app.use(async (context, next) => {
   }
 });
 
-// Webhookエンドポイント
-app.use(async (context) => {
+app.use(async (context: Context) => {
   const body = await context.request.body().value;
   if (body.events) {
     for (const event of body.events) {
       const eventType = event.type;
 
-      // 新規参加者の挨拶とルール通知
       if (eventType === "join") {
         handleJoinEvent(event);
-      }
-
-      // メッセージの処理（管理者コマンドなど）
-      else if (eventType === "message") {
+      } else if (eventType === "message") {
         handleMessageEvent(event);
-      }
-
-      // 管理者によるコマンド処理
-      else if (eventType === "postback") {
+      } else if (eventType === "postback") {
         handleAdminCommands(event);
       }
     }
@@ -53,6 +44,5 @@ app.use(async (context) => {
   context.response.body = { message: "OK" };
 });
 
-// サーバーを起動
 console.log(`Server is running on http://localhost:${port}`);
-await serve(app.listen({ port }));
+await app.listen({ port });
