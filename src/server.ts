@@ -1,38 +1,58 @@
-import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
+import { serve } from "https://deno.land/x/oak/mod.ts";
+import { config } from "./config.ts";
+import { handleAdminCommands } from "./handlers/adminHandler.ts";
 import { handleJoinEvent } from "./handlers/joinHandler.ts";
 import { handleMessageEvent } from "./handlers/messageHandler.ts";
-import { handleAdminCommands } from "./handlers/adminHandler.ts";
+import { verifySignature } from "./utils/apiUtils.ts";
 
-serve(async (req) => {
-  if (req.method === "POST") {
-    const body = await req.json();
-    const events = body.events;
+const port = 8080;
 
-    for (const event of events) {
-      const type = event.type;
+const app = new Application();
 
-      console.log(`[LOG] Event received: ${type}`);
-
-      switch (type) {
-        case "join":
-          await handleJoinEvent(event);
-          break;
-        case "message":
-          if (event.message?.text.startsWith("/")) {
-            await handleAdminCommands(event);
-          } else {
-            await handleMessageEvent(event);
-          }
-          break;
-        default:
-          console.log(`[LOG] Unhandled event type: ${type}`);
-      }
+// リクエストがLINEのWebhookから来た場合
+app.use(async (context, next) => {
+  if (context.request.method === "POST" && context.request.headers.get("x-line-signature")) {
+    const body = await context.request.body().value;
+    const signature = context.request.headers.get("x-line-signature")!;
+    if (verifySignature(body, signature)) {
+      await next();
+    } else {
+      context.response.status = 400;
+      context.response.body = { message: "Invalid signature" };
     }
-
-    return new Response("OK");
+  } else {
+    await next();
   }
-
-  return new Response("Invalid Request", { status: 400 });
 });
 
-console.log("[LOG] Server is running...");
+// Webhookエンドポイント
+app.use(async (context) => {
+  const body = await context.request.body().value;
+  if (body.events) {
+    for (const event of body.events) {
+      const eventType = event.type;
+
+      // 新規参加者の挨拶とルール通知
+      if (eventType === "join") {
+        handleJoinEvent(event);
+      }
+
+      // メッセージの処理（管理者コマンドなど）
+      else if (eventType === "message") {
+        handleMessageEvent(event);
+      }
+
+      // 管理者によるコマンド処理
+      else if (eventType === "postback") {
+        handleAdminCommands(event);
+      }
+    }
+  }
+
+  context.response.status = 200;
+  context.response.body = { message: "OK" };
+});
+
+// サーバーを起動
+console.log(`Server is running on http://localhost:${port}`);
+await serve(app.listen({ port }));
