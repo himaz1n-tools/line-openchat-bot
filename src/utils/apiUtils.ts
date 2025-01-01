@@ -22,3 +22,13 @@ export async function kickUser(userId: string) {
     },
   });
 }
+
+export async function removeNodeFromParent(nodeToRemove: HTMLElement, parentNode: HTMLElement) {
+  // 親ノードが子ノードを持っているかを確認
+  if (parentNode.contains(nodeToRemove)) {
+    parentNode.removeChild(nodeToRemove);
+    console.log("ノードが削除されました");
+  } else {
+    console.log("削除対象のノードは親ノードの子ノードではありません");
+  }
+}
